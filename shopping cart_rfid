@@ -1,0 +1,391 @@
+#include<reg51.h>
+#include<stdio.h>
+#include<string.h>
+
+sfr LCD_Port=0xA0;		/* P1 port as data port */
+//#define LCD_Port=P2;	
+sbit rs=P2^0;			/* Register select pin */
+sbit rw=P2^1;			/* Read/Write pin */
+sbit en=P2^2;			/* Enable pin */
+sbit sw1=P1^0;			   /* Add */
+sbit sw2=P1^0;			  /* Remove */
+//sbit sw3=P3^5;		   /* Total */
+sbit ir_val=P3^6;
+
+unsigned char card_id[13];
+unsigned char rice[]="2E00BD11C240\0";
+unsigned char dal[]="2E00BD112FAD\0";
+unsigned char oil[]="2E00BD0C4BD4\0";
+unsigned char sugar[]="2E00BD13A121\0";
+
+unsigned int t=0;
+unsigned int r=50;
+unsigned int d=80;
+unsigned int o=120;
+unsigned int s=60;
+unsigned int flag=0,temp=0;
+unsigned int count=0;
+
+/* Function to provide delay Approx 1ms with 11.0592 Mhz crystal*/
+void delay(unsigned int count)    		
+{
+     int i,j;
+     for(i=0;i<count;i++)
+     for(j=0;j<112;j++);
+}
+
+void LCD_Command (char cmnd)	/* LCD16x2 command funtion */
+{
+	LCD_Port =(LCD_Port & 0x0F) | (cmnd & 0xF0);/* Send upper nibble */
+	rs=0;			/* Command reg. */
+	rw=0;			/* Write operation */
+	en=1; 
+	delay(1);
+	en=0;
+	delay(2);
+	
+	LCD_Port = (LCD_Port & 0x0F) | (cmnd << 4);/* Send lower nibble */
+	en=1;			/* Enable pulse */
+	delay(1);
+	en=0;
+	delay(5);
+}
+
+void LCD_Char (char char_data)  /* LCD data write function */
+{
+	LCD_Port =(LCD_Port & 0x0F) | (char_data & 0xF0);/* Send upper nibble */
+	rs=1;  			/*Data reg.*/
+	rw=0;  			/*Write operation*/
+	en=1;  
+	delay(1);
+	en=0;
+	delay(2);
+
+	LCD_Port = (LCD_Port & 0x0F) | (char_data << 4);/* Send lower nibble */
+	en=1;  			/* Enable pulse */
+	delay(1);
+	en=0;
+	delay(5);
+
+}
+
+void LCD_String (char *str)	/* Send string to LCD function */
+{
+	int i;
+	for(i=0;str[i]!=0;i++)  /* Send each char of string till the NULL */
+	{
+		LCD_Char (str[i]);  /* Call LCD data write */
+	}
+}
+void recieve()     //Function to recieve data serialy from RS232 
+{
+    unsigned char k;
+     for(k=0;k<12;k++)
+     { 
+         while(RI==0); 
+          card_id[k]=SBUF;
+          RI=0;
+    }
+}
+
+/*int compare( char *a,char *b)
+{
+int j;
+  for(j=0;j<12;j++)
+   {
+    if(a[j]!=b[j])
+   {
+    return 0;
+   }
+   }
+   return 1;
+} */
+
+void convert(unsigned int c)
+{
+   unsigned int a1,b1,a,b,d,e;
+   a1=c/1000;
+   a1=a1|0x30;
+   LCD_Char(a1);
+   b1=c%1000;
+   a=b1/100;
+   a=a|0x30;
+   LCD_Char(a);
+   b=c%100;
+   d=b/10;
+   d=d|0x30;
+   LCD_Char(d);
+   e=b%10;
+   e=e|0x30;
+   LCD_Char(e);
+}
+
+/*void adc_data(unsigned char value)
+{
+  LCD_String((value/1000)+48);
+ LCD_String(((value/100)%10)+48);
+  LCD_String(((value/10)%10)+48);
+  LCD_String((value%10)+48);
+}	 */
+
+void LCD_String_xy (char row, char pos, char *str)  /* Send string to LCD function */
+{
+	if (row == 0)
+	LCD_Command((pos & 0x0F)|0x80);
+	else if (row == 1)
+	LCD_Command((pos & 0x0F)|0xC0);
+	LCD_String(str);  	/* Call LCD string function */
+}
+
+void LCD_Init (void)		/* LCD Initialize function */
+{
+	delay(20);		/* LCD Power ON Initialization time >15ms */
+	LCD_Command (0x02);	/* 4bit mode */
+	LCD_Command (0x28);	/* Initialization of 16X2 LCD in 4bit mode */
+	LCD_Command (0x0C);	/* Display ON Cursor OFF */
+	LCD_Command (0x06);	/* Auto Increment cursor */
+	LCD_Command (0x01);	/* clear display */
+	LCD_Command (0x80);	/* cursor at home position */
+}
+
+void main()
+{
+	ir_val=1;
+    TMOD=0x20;            //Enable Timer 1
+    TH1=0XFD;
+    SCON=0x50;
+    TR1=1;     
+	LCD_Init();		/* Initialization of LCD*/
+	LCD_String("RFID ");  /* write string on 1st line of LCD*/
+	LCD_Command(0xC0);	/* Go to 2nd line*/
+	LCD_String_xy(1,0,"SWIPE CARD");  /*write string on 2nd line*/
+	delay(200);  delay(200);		delay(200); delay(200);
+	
+	/*if(sw3==0)				  /* TOTAL BILL...
+	{
+	  flag=0;
+	  temp=0;
+	  LCD_Init();
+	  LCD_String("Total Bill:");
+	  LCD_Command(0xC0);
+	  //LCD_String_xy(1,0," ");
+	  convert(t);
+	  delay(200);  delay(200);		delay(200); delay(200);
+	  LCD_Init();
+	  LCD_String("Total Item: ");
+	  LCD_Command(0xC0);
+	  convert(count);
+	  delay(200);  delay(200);		delay(200); delay(200);
+	 }	*/
+
+   while(1)
+   {
+	if(sw1==1)			/* ADDING...*/
+	{
+	 // flag=1;
+	 // temp=0;
+	   LCD_Init();
+	  LCD_String("Adding...");
+	 //}
+	 // if(flag==1)
+	 // {
+	  recieve();
+	  if(strcmp(card_id,rice)==0)
+	  {
+	     LCD_Init();
+		 LCD_String("Rice: ");
+		 LCD_Command(0xC0);
+	     convert(r);
+		 t=t+r;
+		 delay(200);  delay(200);		delay(200); delay(200);
+		 if(ir_val==0){
+		 count++;
+		 LCD_Init();
+		 LCD_String("No:of Item: ");
+		 LCD_Command(0xC0);
+		 convert(count);
+		 delay(200);  delay(200);
+		 }	
+		 LCD_Init();
+		 LCD_String("Sum: ");
+		 LCD_Command(0xC0);
+		 convert(t);
+		 delay(200);  delay(200);		delay(200); delay(200);
+	  }	
+	  
+	  else if(strcmp(card_id,dal)==0)
+	  {
+	     LCD_Init();
+		 LCD_String("Dal: ");
+		 LCD_Command(0xC0);
+	     convert(d);
+		 t=t+d;
+		 delay(200);  delay(200);		delay(200); delay(200);
+		 if(ir_val==0){
+		 count++;
+		 LCD_Init();
+		 LCD_String("No:of Item: ");
+		 LCD_Command(0xC0);
+		 convert(count);
+		 delay(200);  delay(200);
+		 }	
+		  LCD_Init();
+		 LCD_String("Sum: ");
+		 LCD_Command(0xC0);
+		 convert(t);
+		 delay(200);  delay(200);		delay(200); delay(200);
+	  }	
+
+	 else if(strcmp(card_id,oil)==0)
+	  {
+	     LCD_Init();
+		 LCD_String("Oil: ");
+		 LCD_Command(0xC0);
+	     convert(o);
+		  t=t+o;
+		  delay(200);  delay(200);		delay(200); delay(200);
+		if(ir_val==0){
+		 count++;
+		 LCD_Init();
+		 LCD_String("No:of Item: ");
+		 LCD_Command(0xC0);
+		 convert(count);
+		 delay(200);  delay(200);
+		 }	
+		  LCD_Init();
+		 LCD_String("Sum: ");
+		 LCD_Command(0xC0);
+		 convert(t);
+		 delay(200);  delay(200);		delay(200); delay(200);
+	  }	
+	  
+	else if(strcmp(card_id,sugar)==0)
+	  {
+	     LCD_Init();
+		 LCD_String("Sugar: ");
+		 LCD_Command(0xC0);
+	     convert(s);
+		 t=t+s;
+		 delay(200);  delay(200);		delay(200); delay(200);
+		 if(ir_val==0){
+		 count++;
+		 LCD_Init();
+		 LCD_String("No:of Item: ");
+		 LCD_Command(0xC0);
+		 convert(count);
+		 delay(200);  delay(200);
+		 } 
+		  LCD_Init();
+		 LCD_String("Sum: ");
+		 LCD_Command(0xC0);
+		 convert(t);
+		   delay(200);  delay(200);		delay(200); delay(200);
+	 }
+	 }
+
+	if(sw2==1)	      /* REMOVING...*/
+	{
+	  //flag=0;
+	 // temp=1;
+	   LCD_Init();
+	  LCD_String("Removing...");
+	// }
+	 // if(temp==1)
+	 // {
+	  recieve();
+	  if(strcmp(card_id,rice)==0)
+	  {
+	     LCD_Init();
+		 LCD_String("Remove Rice: ");
+		 LCD_Command(0xC0);
+	     convert(r);
+		 t=t-r;
+		 delay(200);  delay(200);		delay(200); delay(200);
+		  if(ir_val==0){
+		 count--;
+		 LCD_Init();
+		 LCD_String("No:of Item: ");
+		 LCD_Command(0xC0);
+		 convert(count);
+		 delay(200);  delay(200);
+		 }
+		  LCD_Init();
+		 LCD_String("Sum: ");
+		 LCD_Command(0xC0);
+		 convert(t);
+		 delay(200);  delay(200);		delay(200); delay(200);
+	  }	
+	  
+	  else if(strcmp(card_id,dal)==0)
+	  {
+	     LCD_Init();
+		 LCD_String("Remove dal: ");
+		 LCD_Command(0xC0);
+	     convert(d);
+		 t=t-d;
+		 delay(200);  delay(200);		delay(200); delay(200);
+		 if(ir_val==0){
+		 count--;
+		 LCD_Init();
+		 LCD_String("No:of Item: ");
+		 LCD_Command(0xC0);
+		 convert(count);
+		 delay(200);  delay(200);
+		 }
+		  LCD_Init();
+		 LCD_String("Sum: ");
+		 LCD_Command(0xC0);
+		 convert(t);
+		 delay(200);  delay(200);		delay(200); delay(200);
+	  }	
+
+	  else if(strcmp(card_id,oil)==0)
+	  {
+	     LCD_Init();
+		 LCD_String("Remove Oil: ");
+		 LCD_Command(0xC0);
+	     convert(o);
+		 t=t-o;
+		 delay(200);  delay(200);		delay(200); delay(200);
+		 if(ir_val==0){
+		 count--;
+		 LCD_Init();
+		 LCD_String("No:of Item: ");
+		 LCD_Command(0xC0);
+		 convert(count);
+		 delay(200);  delay(200);
+		 }
+		  LCD_Init();
+		 LCD_String("Sum: ");
+		 LCD_Command(0xC0);
+		 convert(t);
+		 delay(200);  delay(200);		delay(200); delay(200);
+	  }	
+	  
+	  else if(strcmp(card_id,sugar)==0)
+	  {
+	     LCD_Init();
+		 LCD_String("Remove Sugar: ");
+	   	 LCD_Command(0xC0);
+	     convert(s);
+		 t=t-s;
+		 delay(200);  delay(200);		delay(200); delay(200);
+		 if(ir_val==0){
+		 count--;
+		 LCD_Init();
+		 LCD_String("No:of Item: ");
+		 LCD_Command(0xC0);
+		 convert(count);
+		 delay(200);  delay(200);
+		 }
+		  LCD_Init();
+		 LCD_String("Sum: ");
+		 LCD_Command(0xC0);
+		 convert(t);
+		 delay(200);  delay(200);		delay(200); delay(200);
+	  }		
+	 }
+	 delay(200);  delay(200);		delay(200); delay(200);
+	 
+}
+}
